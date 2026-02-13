@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Download,
@@ -8,7 +8,6 @@ import {
     Maximize2,
     Minimize2,
     CheckSquare,
-    Square,
     FileSpreadsheet,
     X,
 } from "lucide-react";
@@ -264,7 +263,7 @@ export function GalleryPanel({
                 </div>
 
                 {/* Frames */}
-                <div className="flex-1 h-full flex gap-3 items-center overflow-x-auto hide-scrollbar py-1 px-4">
+                <div className="flex-1 h-full flex gap-2.5 items-center overflow-x-auto hide-scrollbar py-1 px-4">
                     <AnimatePresence mode="popLayout">
                         {frames.map((frame) => {
                             const isSelected = selectedIds.has(frame.id);
@@ -272,79 +271,88 @@ export function GalleryPanel({
                                 <motion.div
                                     key={frame.id}
                                     layout
-                                    initial={{ width: 0, opacity: 0, x: -20 }}
+                                    initial={{ width: 0, opacity: 0, scale: 0.8 }}
                                     animate={{
                                         width: "auto",
                                         opacity: 1,
-                                        x: 0,
+                                        scale: 1,
                                     }}
-                                    exit={{ width: 0, opacity: 0 }}
+                                    exit={{ width: 0, opacity: 0, scale: 0.8 }}
                                     transition={{
-                                        duration: 0.5,
-                                        ease: [0.2, 0.8, 0.2, 1],
+                                        duration: 0.4,
+                                        ease: [0.25, 0.46, 0.45, 0.94],
                                     }}
                                     className={cn(
-                                        "group relative h-full aspect-video bg-zinc-900 rounded-lg overflow-hidden shrink-0 cursor-pointer transition-all duration-300",
+                                        "group relative h-full aspect-video rounded-xl overflow-hidden shrink-0 cursor-pointer transition-all duration-300",
                                         thumbClass,
                                         isSelected
-                                            ? "border-2 border-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.3)]"
-                                            : "border border-zinc-800 hover:border-zinc-500 hover:shadow-xl"
+                                            ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-[#080808] shadow-[0_0_20px_rgba(59,130,246,0.2)]"
+                                            : "ring-1 ring-white/[0.06] hover:ring-white/20 shadow-lg hover:shadow-2xl"
                                     )}
                                     onClick={() => toggleSelect(frame.id)}
                                 >
+                                    {/* Image */}
                                     <img
                                         src={frame.dataUrl}
                                         alt={frame.filename}
-                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition duration-500"
+                                        className={cn(
+                                            "w-full h-full object-cover transition-all duration-500",
+                                            isSelected ? "brightness-100" : "brightness-[0.85] group-hover:brightness-100 group-hover:scale-[1.03]"
+                                        )}
                                     />
 
-                                    {/* Timestamp badge */}
-                                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1">
-                                        <span className="font-mono text-[8px] text-zinc-300 tabular-nums">
+                                    {/* Subtle vignette overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
+
+                                    {/* Timestamp chip */}
+                                    <div className="absolute bottom-1.5 left-1.5 pointer-events-none">
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-sm font-mono text-[7px] text-zinc-200 tabular-nums tracking-wider ring-1 ring-white/[0.08]">
                                             {formatTime(frame.timestamp)}
                                         </span>
                                     </div>
 
                                     {/* Hover overlay with actions */}
-                                    <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 bg-black/40 transition backdrop-blur-[2px]">
+                                    <div className="absolute inset-0 flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 bg-black/50 backdrop-blur-[3px] transition-opacity duration-200">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 downloadFrame(frame.dataUrl, frame.filename);
                                             }}
-                                            className="text-white hover:scale-110 transition drop-shadow-lg p-1"
+                                            className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/30 text-white transition-all duration-200 hover:scale-110 backdrop-blur-sm"
                                         >
-                                            <Download className="w-4 h-4" />
+                                            <Download className="w-3 h-3" />
                                         </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 onDeleteFrames([frame.id]);
                                             }}
-                                            className="text-white hover:text-red-400 hover:scale-110 transition drop-shadow-lg p-1"
+                                            className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-red-500/40 text-white hover:text-red-200 transition-all duration-200 hover:scale-110 backdrop-blur-sm"
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            <Trash2 className="w-3 h-3" />
                                         </button>
                                     </div>
 
-                                    {/* Selection checkbox indicator */}
+                                    {/* Selection indicator */}
                                     <div
                                         className={cn(
-                                            "absolute top-1 left-1 transition-opacity",
-                                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+                                            "absolute top-1.5 left-1.5 transition-all duration-200",
+                                            isSelected ? "opacity-100 scale-100" : "opacity-0 scale-75 group-hover:opacity-50 group-hover:scale-100"
                                         )}
                                     >
-                                        {isSelected ? (
-                                            <CheckSquare className="w-3.5 h-3.5 text-blue-400 drop-shadow" />
-                                        ) : (
-                                            <Square className="w-3.5 h-3.5 text-white drop-shadow" />
-                                        )}
+                                        <div className={cn(
+                                            "w-4 h-4 rounded-[5px] flex items-center justify-center transition-colors",
+                                            isSelected
+                                                ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                                : "bg-white/20 backdrop-blur-sm ring-1 ring-white/30"
+                                        )}>
+                                            {isSelected && (
+                                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </div>
                                     </div>
-
-                                    {/* New indicator dot */}
-                                    {!isSelected && (
-                                        <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full shadow-lg opacity-100 group-hover:opacity-0 transition-opacity" />
-                                    )}
                                 </motion.div>
                             );
                         })}
