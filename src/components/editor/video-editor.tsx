@@ -70,8 +70,21 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [togglePlay, stepFrame]);
 
+    const [hasExpandedOnce, setHasExpandedOnce] = useState(false);
+    const expansionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const toggleGalleryExpand = useCallback(() => {
         setIsGalleryExpanded((prev) => !prev);
+        // Clear any auto-collapse timer if user manually toggles
+        if (expansionTimerRef.current) clearTimeout(expansionTimerRef.current);
+    }, []);
+
+    const pulseGallery = useCallback(() => {
+        setIsGalleryExpanded(true);
+        if (expansionTimerRef.current) clearTimeout(expansionTimerRef.current);
+        expansionTimerRef.current = setTimeout(() => {
+            setIsGalleryExpanded(false);
+        }, 2000);
     }, []);
 
     const addFrameToGallery = useCallback(
@@ -83,8 +96,14 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
                 timestamp: frame.timestamp,
             };
             setFrames((prev) => [newFrame, ...prev]);
+
+            // Auto-expand on first capture to draw attention
+            if (!hasExpandedOnce) {
+                pulseGallery();
+                setHasExpandedOnce(true);
+            }
         },
-        []
+        [hasExpandedOnce, pulseGallery]
     );
 
     const handleDeleteFrames = useCallback((ids: string[]) => {

@@ -79,36 +79,76 @@ export function useFrameCapture(
         [videoRef]
     );
 
+    const extractFrameFromVideo = useCallback(
+        (source: HTMLVideoElement, filename: string): CapturedFrame | null => {
+            if (!source.videoWidth) return null;
+            const canvas = getCanvas();
+            canvas.width = source.videoWidth;
+            canvas.height = source.videoHeight;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return null;
+            ctx.drawImage(source, 0, 0);
+            return {
+                dataUrl: canvas.toDataURL("image/png"),
+                filename,
+                timestamp: source.currentTime,
+            };
+        },
+        [getCanvas]
+    );
+
     const batchCapture = useCallback(async (): Promise<CapturedFrame[]> => {
         const video = videoRef.current;
-        if (!video || video.readyState < 2) return [];
+        if (!video || video.readyState < 2 || !video.src) return [];
 
-        const originalTime = video.currentTime;
-        const wasPaused = video.paused;
-        if (!wasPaused) video.pause();
+        triggerFlash();
+
+        // Use an offscreen video so the visible player doesn't jump
+        const offscreen = document.createElement("video");
+        offscreen.src = video.src;
+        offscreen.muted = true;
+        offscreen.preload = "auto";
+
+        const waitForReady = (): Promise<void> =>
+            new Promise((resolve) => {
+                if (offscreen.readyState >= 2) {
+                    resolve();
+                    return;
+                }
+                offscreen.addEventListener("loadeddata", () => resolve(), { once: true });
+            });
+
+        const seekOffscreen = (time: number): Promise<void> =>
+            new Promise((resolve) => {
+                offscreen.addEventListener("seeked", () => resolve(), { once: true });
+                offscreen.currentTime = time;
+            });
+
+        await waitForReady();
 
         const frames: CapturedFrame[] = [];
 
         try {
-            // Seek to start
-            await seekToTime(0);
-            const startFrame = extractFrame("REFRAME_START.png");
+            // Capture first frame
+            await seekOffscreen(0);
+            const startFrame = extractFrameFromVideo(offscreen, "REFRAME_START.png");
             if (startFrame) frames.push(startFrame);
 
-            // Seek to end
-            await seekToTime(video.duration);
-            const endFrame = extractFrame("REFRAME_END.png");
+            // Capture last frame (duration - tiny epsilon to avoid overshoot)
+            const endTime = Math.max(0, offscreen.duration - 0.01);
+            await seekOffscreen(endTime);
+            const endFrame = extractFrameFromVideo(offscreen, "REFRAME_END.png");
             if (endFrame) frames.push(endFrame);
-
-            // Return to original position
-            await seekToTime(originalTime);
         } catch (error) {
             console.error("Batch extraction error:", error);
         }
 
-        if (!wasPaused) video.play();
+        // Clean up offscreen element
+        offscreen.src = "";
+        offscreen.load();
+
         return frames;
-    }, [videoRef, seekToTime, extractFrame]);
+    }, [videoRef, triggerFlash, extractFrameFromVideo]);
 
     return {
         captureFrame,
