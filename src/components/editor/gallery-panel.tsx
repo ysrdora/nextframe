@@ -132,17 +132,17 @@ export function GalleryPanel({
         await exportAsZip(toExport, videoName);
     }, [frames, selectedIds, isSelecting, videoName]);
 
-    // Determine thumb size based on expanded state
-    const thumbClass = isExpanded
-        ? "w-36 md:w-44"
-        : "w-24";
-
     return (
         <motion.div
             className="absolute inset-0 flex flex-col justify-end z-40"
             initial={{ y: "100%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
+            transition={{
+                type: "spring",
+                stiffness: 200,
+                damping: 24,
+                mass: 0.8,
+            }}
         >
             <div
                 className={cn(
@@ -271,20 +271,31 @@ export function GalleryPanel({
                                 <motion.div
                                     key={frame.id}
                                     layout
-                                    initial={{ width: 0, opacity: 0, scale: 0.8 }}
+                                    initial={{ opacity: 0, scale: 0.6, filter: "blur(8px)" }}
                                     animate={{
-                                        width: "auto",
                                         opacity: 1,
                                         scale: 1,
+                                        filter: "blur(0px)",
                                     }}
-                                    exit={{ width: 0, opacity: 0, scale: 0.8 }}
+                                    exit={{ opacity: 0, scale: 0.8, filter: "blur(4px)" }}
                                     transition={{
-                                        duration: 0.4,
-                                        ease: [0.25, 0.46, 0.45, 0.94],
+                                        layout: {
+                                            type: "spring",
+                                            stiffness: 300,
+                                            damping: 28,
+                                        },
+                                        opacity: { duration: 0.25, ease: "easeOut" },
+                                        scale: {
+                                            type: "spring",
+                                            stiffness: 400,
+                                            damping: 22,
+                                            mass: 0.6,
+                                        },
+                                        filter: { duration: 0.3 },
                                     }}
                                     className={cn(
-                                        "group relative h-full aspect-video rounded-xl overflow-hidden shrink-0 cursor-pointer transition-all duration-300",
-                                        thumbClass,
+                                        "group relative aspect-video rounded-xl overflow-hidden shrink-0 cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
+                                        isExpanded ? "h-[calc(100%-8px)] w-auto" : "h-[calc(100%-8px)] w-auto",
                                         isSelected
                                             ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-[#080808] shadow-[0_0_20px_rgba(59,130,246,0.2)]"
                                             : "ring-1 ring-white/[0.06] hover:ring-white/20 shadow-lg hover:shadow-2xl"

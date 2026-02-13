@@ -186,7 +186,12 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
             <motion.div
                 className="relative shrink-0 z-40"
                 animate={{ height: isGalleryExpanded ? "14rem" : "7rem" }}
-                transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+                transition={{
+                    type: "spring",
+                    stiffness: 280,
+                    damping: 26,
+                    mass: 0.8,
+                }}
             >
                 <GalleryPanel
                     frames={frames}
