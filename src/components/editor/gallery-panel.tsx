@@ -264,38 +264,32 @@ export function GalleryPanel({
 
                 {/* Frames */}
                 <div className="flex-1 h-full flex gap-2.5 items-center overflow-x-auto hide-scrollbar py-1 px-4">
-                    <AnimatePresence mode="popLayout">
+                    <AnimatePresence>
                         {frames.map((frame) => {
                             const isSelected = selectedIds.has(frame.id);
                             return (
                                 <motion.div
                                     key={frame.id}
-                                    layout
-                                    initial={{ opacity: 0, scale: 0.6, filter: "blur(8px)" }}
+                                    initial={{ opacity: 0, scale: 0.7, filter: "blur(6px)" }}
                                     animate={{
                                         opacity: 1,
                                         scale: 1,
                                         filter: "blur(0px)",
                                     }}
-                                    exit={{ opacity: 0, scale: 0.8, filter: "blur(4px)" }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
                                     transition={{
-                                        layout: {
-                                            type: "spring",
-                                            stiffness: 300,
-                                            damping: 28,
-                                        },
-                                        opacity: { duration: 0.25, ease: "easeOut" },
+                                        opacity: { duration: 0.3, ease: "easeOut" },
                                         scale: {
                                             type: "spring",
-                                            stiffness: 400,
-                                            damping: 22,
-                                            mass: 0.6,
+                                            stiffness: 350,
+                                            damping: 24,
+                                            mass: 0.5,
                                         },
-                                        filter: { duration: 0.3 },
+                                        filter: { duration: 0.35, ease: "easeOut" },
                                     }}
                                     className={cn(
-                                        "group relative aspect-video rounded-xl overflow-hidden shrink-0 cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-                                        isExpanded ? "h-[calc(100%-8px)] w-auto" : "h-[calc(100%-8px)] w-auto",
+                                        "group relative aspect-video rounded-xl overflow-hidden shrink-0 cursor-pointer transition-shadow duration-300",
+                                        "h-[calc(100%-8px)]",
                                         isSelected
                                             ? "ring-2 ring-blue-500 ring-offset-1 ring-offset-[#080808] shadow-[0_0_20px_rgba(59,130,246,0.2)]"
                                             : "ring-1 ring-white/[0.06] hover:ring-white/20 shadow-lg hover:shadow-2xl"
