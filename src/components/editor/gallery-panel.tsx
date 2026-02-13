@@ -1,18 +1,34 @@
 "use client";
 
+import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download } from "lucide-react";
+import {
+    Download,
+    Trash2,
+    Maximize2,
+    Minimize2,
+    CheckSquare,
+    Square,
+    FileSpreadsheet,
+    X,
+} from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
 
 export interface GalleryFrame {
     id: string;
     dataUrl: string;
     filename: string;
+    timestamp: number; // seconds into the video
 }
 
 interface GalleryPanelProps {
     frames: GalleryFrame[];
     isExpanded: boolean;
+    onToggleExpand: () => void;
+    onDeleteFrames: (ids: string[]) => void;
+    videoName: string;
 }
 
 function downloadFrame(dataUrl: string, filename: string) {
@@ -22,7 +38,106 @@ function downloadFrame(dataUrl: string, filename: string) {
     a.click();
 }
 
-export function GalleryPanel({ frames, isExpanded }: GalleryPanelProps) {
+function dataUrlToBlob(dataUrl: string): Blob {
+    const [header, data] = dataUrl.split(",");
+    const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+    const binary = atob(data);
+    const array = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        array[i] = binary.charCodeAt(i);
+    }
+    return new Blob([array], { type: mime });
+}
+
+async function exportAsZip(
+    frames: GalleryFrame[],
+    videoName: string
+) {
+    const JSZip = (await import("jszip")).default;
+    const { saveAs } = await import("file-saver");
+
+    const zip = new JSZip();
+    const folder = zip.folder("frames");
+    if (!folder) return;
+
+    // Add each frame as PNG
+    frames.forEach((frame, i) => {
+        const blob = dataUrlToBlob(frame.dataUrl);
+        const ext = frame.filename.split(".").pop() || "png";
+        folder.file(`frame_${String(i + 1).padStart(3, "0")}.${ext}`, blob);
+    });
+
+    // Build CSV manifest
+    const csvRows = [
+        ["#", "Filename", "Timestamp", "Video"].join(","),
+        ...frames.map((frame, i) =>
+            [
+                i + 1,
+                `frame_${String(i + 1).padStart(3, "0")}.png`,
+                formatTime(frame.timestamp),
+                `"${videoName}"`,
+            ].join(",")
+        ),
+    ];
+    folder.file("manifest.csv", csvRows.join("\n"));
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const safeName = videoName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    saveAs(blob, `${safeName}_frames.zip`);
+}
+
+export function GalleryPanel({
+    frames,
+    isExpanded,
+    onToggleExpand,
+    onDeleteFrames,
+    videoName,
+}: GalleryPanelProps) {
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const isSelecting = selectedIds.size > 0;
+
+    const toggleSelect = useCallback((id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }, []);
+
+    const selectAll = useCallback(() => {
+        setSelectedIds(new Set(frames.map((f) => f.id)));
+    }, [frames]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedIds(new Set());
+    }, []);
+
+    const handleDeleteSelected = useCallback(() => {
+        onDeleteFrames(Array.from(selectedIds));
+        setSelectedIds(new Set());
+    }, [selectedIds, onDeleteFrames]);
+
+    const handleDownloadSelected = useCallback(() => {
+        const selected = frames.filter((f) => selectedIds.has(f.id));
+        selected.forEach((frame) => downloadFrame(frame.dataUrl, frame.filename));
+    }, [frames, selectedIds]);
+
+    const handleExport = useCallback(async () => {
+        const toExport = isSelecting
+            ? frames.filter((f) => selectedIds.has(f.id))
+            : frames;
+        await exportAsZip(toExport, videoName);
+    }, [frames, selectedIds, isSelecting, videoName]);
+
+    // Determine thumb size based on expanded state
+    const thumbClass = isExpanded
+        ? "w-36 md:w-44"
+        : "w-24";
+
     return (
         <motion.div
             className="absolute inset-0 flex flex-col justify-end z-40"
@@ -32,50 +147,207 @@ export function GalleryPanel({ frames, isExpanded }: GalleryPanelProps) {
         >
             <div
                 className={cn(
-                    "h-full border-t bg-[#080808] flex items-center px-4 overflow-hidden transition-colors duration-500",
+                    "h-full border-t bg-[#080808] flex flex-col transition-colors duration-500",
                     isExpanded ? "border-white/20" : "border-white/5"
                 )}
             >
-                {frames.length === 0 && (
-                    <span className="text-[9px] uppercase font-bold tracking-widest text-zinc-800 mr-6 select-none">
-                        Gallery
-                    </span>
-                )}
-                <div className="flex-1 h-full flex gap-3 items-center overflow-x-auto hide-scrollbar py-2 px-1">
+                {/* Gallery Toolbar */}
+                <div className="flex items-center justify-between px-4 pt-2 pb-1 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <span className="text-[9px] uppercase font-bold tracking-widest text-zinc-600 select-none">
+                            Gallery
+                        </span>
+                        {frames.length > 0 && (
+                            <span className="text-[9px] font-mono text-zinc-700 tabular-nums select-none">
+                                {frames.length} frame{frames.length !== 1 ? "s" : ""}
+                            </span>
+                        )}
+
+                        {/* Selection actions */}
+                        <AnimatePresence>
+                            {isSelecting && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -10 }}
+                                    className="flex items-center gap-1.5 ml-2"
+                                >
+                                    <span className="text-[9px] font-mono text-blue-400 tabular-nums select-none">
+                                        {selectedIds.size} selected
+                                    </span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={handleDownloadSelected}
+                                                className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition"
+                                            >
+                                                <Download className="w-3 h-3" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Download selected</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={handleDeleteSelected}
+                                                className="p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Delete selected</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={clearSelection}
+                                                className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Clear selection</TooltipContent>
+                                    </Tooltip>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Right actions */}
+                    <div className="flex items-center gap-1">
+                        {frames.length > 0 && (
+                            <>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            onClick={selectAll}
+                                            className="p-1.5 rounded hover:bg-white/10 text-zinc-600 hover:text-white transition"
+                                        >
+                                            <CheckSquare className="w-3.5 h-3.5" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">Select all</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            onClick={handleExport}
+                                            className="p-1.5 rounded hover:bg-white/10 text-zinc-600 hover:text-white transition"
+                                        >
+                                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">Export ZIP (images + CSV)</TooltipContent>
+                                </Tooltip>
+                            </>
+                        )}
+
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={onToggleExpand}
+                                    className="p-1.5 rounded hover:bg-white/10 text-zinc-600 hover:text-white transition"
+                                >
+                                    {isExpanded ? (
+                                        <Minimize2 className="w-3.5 h-3.5" />
+                                    ) : (
+                                        <Maximize2 className="w-3.5 h-3.5" />
+                                    )}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                                {isExpanded ? "Collapse gallery" : "Expand gallery"}
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                </div>
+
+                {/* Frames */}
+                <div className="flex-1 h-full flex gap-3 items-center overflow-x-auto hide-scrollbar py-1 px-4">
                     <AnimatePresence mode="popLayout">
-                        {frames.map((frame) => (
-                            <motion.div
-                                key={frame.id}
-                                layout
-                                initial={{ width: 0, opacity: 0, x: -20 }}
-                                animate={{ width: "6rem", opacity: 1, x: 0 }}
-                                exit={{ width: 0, opacity: 0 }}
-                                transition={{
-                                    duration: 0.5,
-                                    ease: [0.2, 0.8, 0.2, 1],
-                                }}
-                                className="group relative h-full aspect-video bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 cursor-pointer hover:border-zinc-500 transition-all duration-300 hover:shadow-xl"
-                            >
-                                <img
-                                    src={frame.dataUrl}
-                                    alt={frame.filename}
-                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition duration-500"
-                                />
-                                {/* Hover overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 bg-black/40 transition backdrop-blur-[2px]">
-                                    <button
-                                        onClick={() =>
-                                            downloadFrame(frame.dataUrl, frame.filename)
-                                        }
-                                        className="text-white hover:scale-110 transition drop-shadow-lg"
+                        {frames.map((frame) => {
+                            const isSelected = selectedIds.has(frame.id);
+                            return (
+                                <motion.div
+                                    key={frame.id}
+                                    layout
+                                    initial={{ width: 0, opacity: 0, x: -20 }}
+                                    animate={{
+                                        width: "auto",
+                                        opacity: 1,
+                                        x: 0,
+                                    }}
+                                    exit={{ width: 0, opacity: 0 }}
+                                    transition={{
+                                        duration: 0.5,
+                                        ease: [0.2, 0.8, 0.2, 1],
+                                    }}
+                                    className={cn(
+                                        "group relative h-full aspect-video bg-zinc-900 rounded-lg overflow-hidden shrink-0 cursor-pointer transition-all duration-300",
+                                        thumbClass,
+                                        isSelected
+                                            ? "border-2 border-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+                                            : "border border-zinc-800 hover:border-zinc-500 hover:shadow-xl"
+                                    )}
+                                    onClick={() => toggleSelect(frame.id)}
+                                >
+                                    <img
+                                        src={frame.dataUrl}
+                                        alt={frame.filename}
+                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition duration-500"
+                                    />
+
+                                    {/* Timestamp badge */}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1">
+                                        <span className="font-mono text-[8px] text-zinc-300 tabular-nums">
+                                            {formatTime(frame.timestamp)}
+                                        </span>
+                                    </div>
+
+                                    {/* Hover overlay with actions */}
+                                    <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 bg-black/40 transition backdrop-blur-[2px]">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                downloadFrame(frame.dataUrl, frame.filename);
+                                            }}
+                                            className="text-white hover:scale-110 transition drop-shadow-lg p-1"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDeleteFrames([frame.id]);
+                                            }}
+                                            className="text-white hover:text-red-400 hover:scale-110 transition drop-shadow-lg p-1"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {/* Selection checkbox indicator */}
+                                    <div
+                                        className={cn(
+                                            "absolute top-1 left-1 transition-opacity",
+                                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+                                        )}
                                     >
-                                        <Download className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                {/* New indicator dot */}
-                                <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full shadow-lg opacity-100 group-hover:opacity-0 transition-opacity" />
-                            </motion.div>
-                        ))}
+                                        {isSelected ? (
+                                            <CheckSquare className="w-3.5 h-3.5 text-blue-400 drop-shadow" />
+                                        ) : (
+                                            <Square className="w-3.5 h-3.5 text-white drop-shadow" />
+                                        )}
+                                    </div>
+
+                                    {/* New indicator dot */}
+                                    {!isSelected && (
+                                        <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full shadow-lg opacity-100 group-hover:opacity-0 transition-opacity" />
+                                    )}
+                                </motion.div>
+                            );
+                        })}
                     </AnimatePresence>
                 </div>
             </div>

@@ -6,6 +6,7 @@ import { formatTime } from "@/lib/utils";
 interface CapturedFrame {
     dataUrl: string;
     filename: string;
+    timestamp: number;
 }
 
 interface UseFrameCaptureReturn {
@@ -45,6 +46,7 @@ export function useFrameCapture(
             return {
                 dataUrl: canvas.toDataURL("image/png"),
                 filename,
+                timestamp: video.currentTime,
             };
         },
         [videoRef, getCanvas]

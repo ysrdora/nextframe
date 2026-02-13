@@ -30,9 +30,7 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
     const [frames, setFrames] = useState<GalleryFrame[]>([]);
     const [isBatchLoading, setIsBatchLoading] = useState(false);
     const [isGalleryExpanded, setIsGalleryExpanded] = useState(false);
-    const [hasExpandedOnce, setHasExpandedOnce] = useState(false);
     const [controlsVisible, setControlsVisible] = useState(false);
-    const expansionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const videoUrlRef = useRef<string>("");
 
     // Load video when file changes
@@ -72,34 +70,27 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [togglePlay, stepFrame]);
 
-    const expandGallery = useCallback(
-        (duration: number = 2000) => {
-            setIsGalleryExpanded(true);
-            if (expansionTimerRef.current) clearTimeout(expansionTimerRef.current);
-            expansionTimerRef.current = setTimeout(() => {
-                setIsGalleryExpanded(false);
-            }, duration);
-        },
-        []
-    );
+    const toggleGalleryExpand = useCallback(() => {
+        setIsGalleryExpanded((prev) => !prev);
+    }, []);
 
     const addFrameToGallery = useCallback(
-        (frame: { dataUrl: string; filename: string }) => {
+        (frame: { dataUrl: string; filename: string; timestamp: number }) => {
             const newFrame: GalleryFrame = {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 dataUrl: frame.dataUrl,
                 filename: frame.filename,
+                timestamp: frame.timestamp,
             };
             setFrames((prev) => [newFrame, ...prev]);
-
-            // Only auto-expand on first capture
-            if (!hasExpandedOnce) {
-                expandGallery();
-                setHasExpandedOnce(true);
-            }
         },
-        [hasExpandedOnce, expandGallery]
+        []
     );
+
+    const handleDeleteFrames = useCallback((ids: string[]) => {
+        const idSet = new Set(ids);
+        setFrames((prev) => prev.filter((f) => !idSet.has(f.id)));
+    }, []);
 
     const handleCapture = useCallback(() => {
         const frame = captureFrame();
@@ -175,10 +166,16 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
             {/* Gallery Panel */}
             <motion.div
                 className="relative shrink-0 z-40"
-                animate={{ height: isGalleryExpanded ? "11rem" : "7rem" }}
+                animate={{ height: isGalleryExpanded ? "14rem" : "7rem" }}
                 transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
             >
-                <GalleryPanel frames={frames} isExpanded={isGalleryExpanded} />
+                <GalleryPanel
+                    frames={frames}
+                    isExpanded={isGalleryExpanded}
+                    onToggleExpand={toggleGalleryExpand}
+                    onDeleteFrames={handleDeleteFrames}
+                    videoName={videoFile.name}
+                />
             </motion.div>
         </div>
     );
