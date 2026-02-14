@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Reframe | Intelligent Frame Extraction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { 
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        bg: '#050505',
+                        surface: '#121212',
+                        border: '#27272a',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.6s ease-out forwards',
+                        'slide-up': 'slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'scale-in': 'scaleIn 0.15s ease-out forwards',
+                        'gallery-enter': 'galleryEnter 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { transform: 'translateY(40px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
+                        scaleIn: { '0%': { transform: 'scale(0.95)', opacity: '0' }, '100%': { transform: 'scale(1)', opacity: '1' } },
+                        galleryEnter: { 
+                            '0%': { width: '0px', opacity: '0', transform: 'translateX(-20px)' }, 
+                            '100%': { width: '6rem', opacity: '1', transform: 'translateX(0)' } 
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Range Slider */
+        input[type=range] { -webkit-appearance: none; background: transparent; margin: 0; padding: 0; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px;
+            background: #fff; border-radius: 50%; cursor: pointer; margin-top: -5px;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+            transition: transform 0.15s ease;
+            transform: scale(0); /* Hidden by default */
+        }
+        .scrubber-container:hover input[type=range]::-webkit-slider-thumb { transform: scale(1); }
+        input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: transparent; }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Premium Frosted Glass */
+        .glass-panel {
+            background: rgba(10, 10, 10, 0.75);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 
+                0 25px 50px -12px rgba(0,0,0,0.9), 
+                inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        /* Floating Timecode Badge */
+        .time-badge {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        .hero-gradient { background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.9) 100%); }
+        
+        /* Drag Overlay - Fixed to viewport to work when scrolling */
+        .drag-active::after {
+            content: 'Drop Video Here';
+            position: fixed; inset: 0; background: rgba(5,5,5,0.9);
+            border: 2px dashed #52525b; z-index: 999;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 1.5rem; font-weight: 400;
+            backdrop-filter: blur(8px); margin: 1rem; border-radius: 1rem;
+        }
+
+        .no-select { user-select: none; -webkit-user-select: none; }
+
+        /* Utility to lock body when editor is active */
+        body.editor-mode { height: 100dvh; overflow: hidden; }
+        
+        /* Smooth scrolling for the landing page */
+        html { scroll-behavior: smooth; }
+    </style>
+</head>
+<body id="appBody" class="bg-bg text-zinc-100 min-h-[100dvh] w-full flex flex-col p-3 md:p-6 transition-colors duration-500 selection:bg-white selection:text-black overflow-x-hidden">
+
+    <!-- Navbar -->
+    <nav class="flex items-center justify-between mb-3 z-50 shrink-0 relative">
+        <div class="flex items-center gap-2 cursor-pointer group" onclick="location.reload()">
+            <span class="font-medium tracking-tight text-sm text-zinc-400 group-hover:text-white transition">reframe</span>
+            <span id="badge" class="hidden px-1.5 py-px rounded-[4px] text-[9px] bg-zinc-800 text-zinc-500 font-mono animate-fade-in tracking-wider">STUDIO</span>
+        </div>
+        <div class="flex items-center gap-2 relative" id="navActions">
+            <button id="navImportBtn" onclick="triggerUpload()" class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/50 hover:bg-zinc-800 hover:border-zinc-700 transition text-[11px] font-medium group text-zinc-400 hover:text-white">
+                <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <span>Import</span>
+            </button>
+            <button id="menuTrigger" class="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-500 transition hover:text-white">
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            </button>
+            <div id="dropdownMenu" class="absolute top-full right-0 mt-2 w-56 bg-[#1a1a1a] rounded-xl shadow-2xl border border-zinc-800 py-1 hidden origin-top-right z-[100] ring-1 ring-black/5">
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors group"><span class="text-[13px] text-zinc-400 group-hover:text-zinc-200">About</span></a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors group"><span class="text-[13px] text-zinc-400 group-hover:text-zinc-200">Feedback</span></a>
+                <div class="h-px bg-zinc-800 my-1 mx-2"></div>
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors group"><span class="text-[13px] text-zinc-400 group-hover:text-zinc-200">Privacy</span></a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN STAGE (Hero & Editor) -->
+    <div id="mainStage" class="relative rounded-xl overflow-hidden bg-[#0a0a0a] border border-zinc-800/50 group animate-fade-in shadow-2xl transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] h-[82vh] md:h-[85vh] shrink-0">
+        
+        <!-- Hero State -->
+        <div id="heroContent" class="absolute inset-0 transition-opacity duration-700 z-10">
+            <img src="https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?q=80&w=2942&auto=format&fit=crop" 
+                 class="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition duration-[3s] ease-out grayscale-[20%]">
+            <div class="absolute inset-0 hero-gradient"></div>
+            <div class="absolute bottom-0 left-0 p-8 md:p-12 w-full max-w-3xl animate-slide-up" style="animation-delay: 0.2s;">
+                <h1 class="text-3xl md:text-5xl font-semibold tracking-tight leading-[1.1] mb-3 text-white">Intelligent Frame<br>Extraction.</h1>
+                <p class="text-zinc-500 text-sm font-normal tracking-wide">Every Story Starts and Ends with a Frame.</p>
+            </div>
+        </div>
+
+        <!-- Editor State -->
+        <div id="editorContent" class="absolute inset-0 z-20 opacity-0 pointer-events-none transition-opacity duration-700 bg-black flex flex-col items-center justify-center">
+            <video id="video" class="w-full h-full object-contain" playsinline webkit-playsinline></video>
+            <div id="flash" class="absolute inset-0 bg-white pointer-events-none opacity-0 mix-blend-overlay z-30 transition-opacity duration-150"></div>
+
+            <!-- Mobile Timecode (Floating Badge) -->
+            <div class="absolute top-6 left-1/2 -translate-x-1/2 z-40 time-badge px-3 py-1 rounded-full animate-fade-in opacity-0 transition-opacity duration-500 md:hidden" id="mobileTimecodeBadge">
+                <span class="font-mono text-[11px] text-zinc-200 font-medium tracking-widest tabular-nums time-display">00:00:00</span>
+            </div>
+
+            <!-- Floating Controls -->
+            <div id="controls" class="absolute bottom-6 w-auto min-w-[320px] max-w-[92%] md:w-[80%] md:max-w-4xl glass-panel rounded-xl px-4 py-3 z-40 flex flex-col gap-3 translate-y-10 opacity-0 transition-all duration-700 shadow-2xl">
+                
+                <!-- Scrubber -->
+                <div class="relative w-full h-4 flex items-center group cursor-pointer scrubber-container">
+                    <div class="absolute w-full h-[2px] bg-white/20 rounded-full overflow-hidden group-hover:h-[4px] transition-all duration-300">
+                        <div id="progressFill" class="h-full bg-white w-0 shadow-[0_0_15px_rgba(255,255,255,0.8)]"></div>
+                    </div>
+                    <input type="range" id="seeker" min="0" max="100" step="0.01" value="0" class="relative w-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+
+                <!-- Controls Row -->
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <button id="playBtn" class="text-zinc-300 hover:text-white transition active:scale-95 p-1 no-select" title="Play/Pause">
+                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        <div class="flex items-center gap-1 border-l border-white/10 pl-4">
+                            <button id="prevFrame" class="text-zinc-500 hover:text-white transition active:scale-95 hover:bg-white/10 p-1.5 rounded-lg no-select" title="Previous Frame">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                            </button>
+                            <button id="nextFrame" class="text-zinc-500 hover:text-white transition active:scale-95 hover:bg-white/10 p-1.5 rounded-lg no-select" title="Next Frame">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                            </button>
+                        </div>
+                        <div class="hidden md:block pl-2">
+                             <span class="font-mono text-[11px] text-zinc-400 font-medium tracking-widest tabular-nums time-display select-none">00:00:00</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                         <button id="batchBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition group no-select" title="Extract First & Last">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 6h2v12H4zm14 0h2v12h-2zm-8 6h-4m8 0h-4"/></svg>
+                            <span class="hidden md:inline text-[11px] font-medium tracking-wide">First / Last</span>
+                        </button>
+                        <button id="captureBtn" class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/5 shadow-sm transition active:scale-95 group ml-2 no-select" title="Snapshot">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="group-hover:scale-105 transition-transform">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interface Gap/Actions -->
+    <div id="bottomPanel" class="relative h-28 shrink-0 transition-[height] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] z-40">
+        
+        <!-- Action Button (Landing) -->
+        <div id="landingActions" class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center transition-all duration-500 z-50">
+            <button onclick="triggerUpload()" class="glass-panel px-8 py-4 rounded-full flex items-center gap-4 hover:bg-white/10 hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer group shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6)] border-white/10">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="text-zinc-300 group-hover:text-white transition drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span class="text-base font-semibold tracking-wide text-zinc-100 group-hover:text-white group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] transition-all">Add a Video</span>
+            </button>
+            <p class="text-[10px] text-zinc-600 font-medium tracking-wide opacity-0 animate-fade-in mt-3" style="animation-delay: 0.5s">or drop video here</p>
+        </div>
+
+        <!-- Gallery (Editor) -->
+        <div id="mediaBin" class="absolute inset-0 flex flex-col justify-end translate-y-full opacity-0 transition-all duration-700 ease-out z-40">
+            <div id="galleryContainer" class="h-full border-t border-white/5 bg-[#080808] flex items-center px-4 overflow-hidden transition-colors duration-500">
+                <span id="emptyBinText" class="text-[9px] uppercase font-bold tracking-widest text-zinc-800 mr-6 select-none">Gallery</span>
+                <div id="gallery" class="flex-1 h-full flex gap-3 items-center overflow-x-auto hide-scrollbar py-2 px-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCROLL CONTENT: About Section -->
+    <section id="aboutSection" class="w-full max-w-5xl mx-auto px-6 py-24 md:py-32 flex flex-col items-center text-center gap-8 md:gap-10 animate-fade-in opacity-0 fill-mode-forwards relative z-30" style="animation-delay: 0.8s;">
+        <h2 class="text-3xl md:text-5xl lg:text-6xl font-medium tracking-tight text-white leading-[1.15]">
+            Reframe is a web-based filmmaking<br class="hidden md:block"> tool built by and for filmmakers.
+        </h2>
+        <p class="text-base md:text-xl text-zinc-400 max-w-2xl leading-relaxed font-light">
+            helping professional AI filmmaker to seamlessly extended their videos by extracting any frame and building from there, transforming their creative process.
+        </p>
+        
+        <div class="flex flex-col md:flex-row items-center justify-between w-full pt-16 md:pt-24 border-t border-zinc-900 text-zinc-600 text-[10px] md:text-xs tracking-wider uppercase font-mono mt-8 md:mt-12 gap-4">
+            <span>Serverless, client-based web app. 100% Secure.</span>
+            <span>Copyright AD Terms of Service apply.</span>
+        </div>
+    </section>
+
+    <input type="file" id="fileInput" accept="video/*" class="hidden">
+    <canvas id="canvas" class="hidden"></canvas>
+
+    <script>
+        // --- Elements ---
+        const fileInput = document.getElementById('fileInput');
+        const heroContent = document.getElementById('heroContent');
+        const editorContent = document.getElementById('editorContent');
+        const landingActions = document.getElementById('landingActions');
+        const mediaBin = document.getElementById('mediaBin');
+        const controls = document.getElementById('controls');
+        const badge = document.getElementById('badge');
+        const video = document.getElementById('video');
+        const mainStage = document.getElementById('mainStage');
+        const navImportBtn = document.getElementById('navImportBtn');
+        const playBtn = document.getElementById('playBtn');
+        const seeker = document.getElementById('seeker');
+        const progressFill = document.getElementById('progressFill');
+        const timeDisplays = document.querySelectorAll('.time-display');
+        const mobileTimecodeBadge = document.getElementById('mobileTimecodeBadge');
+        const gallery = document.getElementById('gallery');
+        const emptyBinText = document.getElementById('emptyBinText');
+        const batchBtn = document.getElementById('batchBtn');
+        const flash = document.getElementById('flash');
+        const bottomPanel = document.getElementById('bottomPanel');
+        const galleryContainer = document.getElementById('galleryContainer');
+        const menuTrigger = document.getElementById('menuTrigger');
+        const dropdownMenu = document.getElementById('dropdownMenu');
+        const prevFrameBtn = document.getElementById('prevFrame');
+        const nextFrameBtn = document.getElementById('nextFrame');
+        const aboutSection = document.getElementById('aboutSection');
+        const appBody = document.getElementById('appBody');
+
+        let expansionTimeout;
+        let hasExpandedGallery = false;
+        let scrubInterval;
+        let scrubTimeout;
+
+        // --- Logic ---
+        function triggerUpload() { fileInput.click(); }
+
+        // --- Menu Logic ---
+        menuTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = dropdownMenu.classList.contains('hidden');
+            if (isHidden) {
+                dropdownMenu.classList.remove('hidden');
+                dropdownMenu.classList.add('animate-scale-in');
+            } else {
+                dropdownMenu.classList.add('hidden');
+                dropdownMenu.classList.remove('animate-scale-in');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!dropdownMenu.contains(e.target) && e.target !== menuTrigger) {
+                dropdownMenu.classList.add('hidden');
+            }
+        });
+
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if(heroContent.classList.contains('opacity-0')) return; 
+            document.body.classList.add('drag-active'); 
+        });
+        window.addEventListener('dragleave', (e) => { 
+            if (e.clientX === 0 && e.clientY === 0) {
+                 document.body.classList.remove('drag-active');
+            }
+        });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault(); 
+            document.body.classList.remove('drag-active');
+            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('video/')) return alert("Please drop a valid video file.");
+
+            appBody.classList.add('editor-mode'); 
+            aboutSection.style.display = 'none'; 
+            
+            mainStage.classList.remove('h-[82vh]', 'md:h-[85vh]', 'shrink-0');
+            mainStage.classList.add('flex-1');
+
+            const url = URL.createObjectURL(file);
+            video.src = url;
+            video.currentTime = 0; 
+            seeker.value = 0;
+            progressFill.style.width = '0%';
+            video.load();
+
+            hasExpandedGallery = false;
+
+            heroContent.classList.add('opacity-0', 'pointer-events-none');
+            editorContent.classList.remove('opacity-0', 'pointer-events-none');
+            landingActions.classList.add('opacity-0', 'scale-90', 'pointer-events-none');
+            mediaBin.classList.remove('translate-y-full', 'opacity-0');
+            navImportBtn.innerHTML = `<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg><span>New</span>`;
+            navImportBtn.onclick = () => location.reload();
+
+            setTimeout(() => {
+                controls.classList.remove('translate-y-10', 'opacity-0');
+                mobileTimecodeBadge.classList.remove('opacity-0');
+                badge.classList.remove('hidden');
+            }, 500);
+        }
+
+        const togglePlay = () => {
+            if (video.paused) {
+                video.play();
+                playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>`;
+            } else {
+                video.pause();
+                playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+            }
+        };
+        playBtn.addEventListener('click', togglePlay);
+        video.addEventListener('click', togglePlay);
+
+        function updateTime() {
+             if (!isNaN(video.duration)) {
+                const pct = (video.currentTime / video.duration) * 100;
+                seeker.value = pct;
+                progressFill.style.width = `${pct}%`;
+                const t = formatTime(video.currentTime);
+                timeDisplays.forEach(el => el.innerText = t);
+            }
+        }
+
+        video.addEventListener('timeupdate', updateTime);
+        
+        video.addEventListener('loadedmetadata', () => {
+            seeker.value = 0; progressFill.style.width = '0%';
+            timeDisplays.forEach(el => el.innerText = "00:00:00");
+        });
+        
+        seeker.addEventListener('input', () => {
+            const time = (seeker.value / 100) * video.duration;
+            video.currentTime = time;
+            progressFill.style.width = `${seeker.value}%`;
+            const t = formatTime(video.currentTime);
+            timeDisplays.forEach(el => el.innerText = t);
+        });
+
+        // --- Continuous Scrub Logic ---
+        const step = (dir) => { 
+            video.pause(); 
+            playBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + dir * (1/24))); 
+        };
+
+        function startScrub(dir) {
+            step(dir);
+            scrubTimeout = setTimeout(() => {
+                scrubInterval = setInterval(() => step(dir), 80);
+            }, 400);
+        }
+
+        function stopScrub() {
+            clearTimeout(scrubTimeout);
+            clearInterval(scrubInterval);
+        }
+
+        [prevFrameBtn, nextFrameBtn].forEach((btn, index) => {
+            const dir = index === 0 ? -1 : 1;
+            btn.addEventListener('mousedown', (e) => { if(e.button === 0) startScrub(dir); });
+            btn.addEventListener('mouseup', stopScrub);
+            btn.addEventListener('mouseleave', stopScrub);
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); startScrub(dir); });
+            btn.addEventListener('touchend', stopScrub);
+            btn.addEventListener('touchcancel', stopScrub);
+        });
+
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            if(!video.src) return;
+            triggerFlash();
+            saveFrame(`REFRAME_${formatTime(video.currentTime).replace(/:/g,'')}.png`);
+        });
+
+        // --- REVISED BATCH FUNCTION (No jumping, no glitch) ---
+        batchBtn.addEventListener('click', async () => {
+            if(!video.src || video.readyState < 2) return;
+            
+            const originalBtnContent = batchBtn.innerHTML;
+            batchBtn.innerHTML = `<span class="animate-pulse">Extracting...</span>`;
+            batchBtn.style.pointerEvents = 'none';
+
+            const originalTime = video.currentTime;
+            const wasPaused = video.paused;
+            if(!wasPaused) video.pause();
+
+            // Freeze Overlay to hide seeking
+            const freezeCanvas = document.createElement('canvas');
+            freezeCanvas.width = video.videoWidth;
+            freezeCanvas.height = video.videoHeight;
+            freezeCanvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const overlay = document.createElement('img');
+            overlay.src = freezeCanvas.toDataURL();
+            overlay.className = "absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"; 
+            video.parentElement.insertBefore(overlay, video.nextSibling);
+
+            try {
+                await seekTo(0);
+                saveFrame('REFRAME_START.png'); 
+
+                await seekTo(video.duration);
+                saveFrame('REFRAME_END.png');   
+
+                await seekTo(originalTime);
+            } catch (e) {
+                console.error("Batch extraction error:", e);
+            } finally {
+                overlay.remove(); 
+                if(!wasPaused) video.play();
+                batchBtn.innerHTML = originalBtnContent;
+                batchBtn.style.pointerEvents = 'auto';
+            }
+        });
+
+        function seekTo(time) {
+            return new Promise(resolve => {
+                const onSeek = () => {
+                    video.removeEventListener('seeked', onSeek);
+                    resolve();
+                };
+                video.addEventListener('seeked', onSeek);
+                video.currentTime = time;
+            });
+        }
+
+        function saveFrame(filename) {
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            addToGallery(canvas.toDataURL('image/png'), filename);
+        }
+
+        function triggerFlash() {
+            flash.style.opacity = '0.5';
+            setTimeout(() => flash.style.opacity = '0', 150);
+        }
+
+        function expandGalleryPanel(duration = 2000) {
+            bottomPanel.style.height = '11rem'; 
+            galleryContainer.classList.remove('border-white/5');
+            galleryContainer.classList.add('border-white/20');
+
+            if (expansionTimeout) clearTimeout(expansionTimeout);
+            
+            expansionTimeout = setTimeout(() => {
+                bottomPanel.style.height = ''; 
+                galleryContainer.classList.add('border-white/5');
+                galleryContainer.classList.remove('border-white/20');
+            }, duration);
+        }
+
+        function addToGallery(url, name) {
+            // Only expand automatically on the FIRST capture
+            if (!hasExpandedGallery) {
+                expandGalleryPanel();
+                hasExpandedGallery = true;
+            } 
+            
+            emptyBinText.style.display = 'none';
+            
+            const div = document.createElement('div');
+            div.className = "group relative h-full aspect-video bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shrink-0 animate-gallery-enter cursor-pointer hover:border-zinc-500 transition-all duration-300 hover:shadow-xl";
+            div.innerHTML = `
+                <img src="${url}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition duration-500">
+                <div class="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 bg-black/40 transition backdrop-blur-[2px]">
+                     <button onclick="dl('${url}', '${name}')" class="text-white hover:scale-110 transition drop-shadow-lg"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg></button>
+                </div>
+                <div class="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full shadow-lg opacity-100 group-hover:opacity-0 transition-opacity"></div>
+            `;
+            gallery.prepend(div);
+            gallery.scrollTo({ left: 0, behavior: 'smooth' });
+        }
+
+        window.dl = (u,n) => { const a = document.createElement('a'); a.href=u; a.download=n; a.click(); }
+        
+        function formatTime(seconds) {
+            if(isNaN(seconds)) return "00:00:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            const f = Math.floor((seconds % 1) * 24);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
+        }
+
+        document.addEventListener('keydown', e => {
+            if(heroContent.classList.contains('opacity-0')) {
+                if(e.code === 'Space') { e.preventDefault(); togglePlay(); }
+                if(e.code === 'ArrowRight') step(1);
+                if(e.code === 'ArrowLeft') step(-1);
+            }
+        });
+    </script>
+</body>
+</html>

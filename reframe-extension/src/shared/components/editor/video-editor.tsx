@@ -1,0 +1,228 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useVideoPlayer } from "@/hooks/use-video-player";
+import { useFrameCapture } from "@/hooks/use-frame-capture";
+import { Scrubber } from "./scrubber";
+import { ControlsBar } from "./controls-bar";
+import { GalleryPanel, type GalleryFrame } from "./gallery-panel";
+import { MobileTimecode } from "./mobile-timecode";
+import { cn } from "@/lib/utils";
+import { TooltipProvider } from "../ui/tooltip";
+
+interface VideoEditorProps {
+    videoFile?: File; // Local upload mode
+    videoRef?: React.RefObject<HTMLVideoElement | null>; // Web video mode
+}
+
+export function VideoEditor({ videoFile, videoRef: externalVideoRef }: VideoEditorProps) {
+    const internalVideoRef = useRef<HTMLVideoElement>(null);
+    const activeVideoRef = externalVideoRef || internalVideoRef;
+
+    const {
+        isPlaying,
+        progress,
+        timecode,
+        togglePlay,
+        seek,
+        stepFrame,
+    } = useVideoPlayer(activeVideoRef);
+
+    const { captureFrame, batchCapture, showFlash } = useFrameCapture(activeVideoRef);
+
+    const [frames, setFrames] = useState<GalleryFrame[]>([]);
+    const [isBatchLoading, setIsBatchLoading] = useState(false);
+    const [isGalleryExpanded, setIsGalleryExpanded] = useState(false);
+    const [controlsVisible, setControlsVisible] = useState(false);
+    const videoUrlRef = useRef<string>("");
+
+    // Load video when file changes (local upload mode)
+    useEffect(() => {
+        if (videoFile && !externalVideoRef) {
+            const url = URL.createObjectURL(videoFile);
+            videoUrlRef.current = url;
+            const video = activeVideoRef.current;
+            if (video) {
+                video.src = url;
+                video.currentTime = 0;
+                video.load();
+            }
+
+            // Reveal controls after a delay
+            const timer = setTimeout(() => setControlsVisible(true), 500);
+
+            return () => {
+                clearTimeout(timer);
+                URL.revokeObjectURL(url);
+            };
+        }
+    }, [videoFile, externalVideoRef, activeVideoRef]);
+
+    // For web video mode, show controls immediately
+    useEffect(() => {
+        if (externalVideoRef) {
+            setControlsVisible(true);
+        }
+    }, [externalVideoRef]);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space") {
+                e.preventDefault();
+                togglePlay();
+            }
+            if (e.code === "ArrowRight") stepFrame(1);
+            if (e.code === "ArrowLeft") stepFrame(-1);
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [togglePlay, stepFrame]);
+
+    const [hasExpandedOnce, setHasExpandedOnce] = useState(false);
+    const expansionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const toggleGalleryExpand = useCallback(() => {
+        setIsGalleryExpanded((prev) => !prev);
+        // Clear any auto-collapse timer if user manually toggles
+        if (expansionTimerRef.current) clearTimeout(expansionTimerRef.current);
+    }, []);
+
+    const pulseGallery = useCallback(() => {
+        setIsGalleryExpanded(true);
+        if (expansionTimerRef.current) clearTimeout(expansionTimerRef.current);
+        expansionTimerRef.current = setTimeout(() => {
+            setIsGalleryExpanded(false);
+        }, 2000);
+    }, []);
+
+    const addFrameToGallery = useCallback(
+        (frame: { dataUrl: string; filename: string; timestamp: number }) => {
+            const newFrame: GalleryFrame = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                dataUrl: frame.dataUrl,
+                filename: frame.filename,
+                timestamp: frame.timestamp,
+                isFirst: !hasExpandedOnce,
+            };
+            setFrames((prev) => [newFrame, ...prev]);
+
+            // Auto-expand on first capture to draw attention
+            if (!hasExpandedOnce) {
+                pulseGallery();
+                setHasExpandedOnce(true);
+            }
+        },
+        [hasExpandedOnce, pulseGallery]
+    );
+
+    const handleDeleteFrames = useCallback((ids: string[]) => {
+        const idSet = new Set(ids);
+        setFrames((prev) => prev.filter((f) => !idSet.has(f.id)));
+    }, []);
+
+    const handleCapture = useCallback(() => {
+        const frame = captureFrame();
+        if (frame) {
+            addFrameToGallery(frame);
+        }
+    }, [captureFrame, addFrameToGallery]);
+
+    const handleBatchCapture = useCallback(async () => {
+        setIsBatchLoading(true);
+        const capturedFrames = await batchCapture();
+        capturedFrames.forEach((frame) => addFrameToGallery(frame));
+        setIsBatchLoading(false);
+    }, [batchCapture, addFrameToGallery]);
+
+    return (
+        <TooltipProvider>
+            <div className="flex flex-col flex-1 min-h-0">
+                {/* Video Stage */}
+                <div className="relative rounded-xl overflow-hidden bg-black border border-zinc-800/50 shadow-2xl flex-1 min-h-0">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        {!externalVideoRef && (
+                            <video
+                                ref={internalVideoRef}
+                                className="w-full h-full object-contain cursor-pointer"
+                                onClick={togglePlay}
+                                playsInline
+                            />
+                        )}
+                        {externalVideoRef && externalVideoRef.current && (
+                            <video
+                                className="w-full h-full object-contain cursor-pointer"
+                                onClick={togglePlay}
+                                playsInline
+                                src={externalVideoRef.current.src}
+                            />
+                        )}
+                    </div>
+
+                {/* Flash overlay */}
+                <AnimatePresence>
+                    {showFlash && (
+                        <motion.div
+                            className="absolute inset-0 bg-white pointer-events-none mix-blend-overlay z-30"
+                            initial={{ opacity: 0.5 }}
+                            animate={{ opacity: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                        />
+                    )}
+                </AnimatePresence>
+
+                {/* Mobile Timecode */}
+                {controlsVisible && <MobileTimecode timecode={timecode} />}
+
+                {/* Floating Controls */}
+                <motion.div
+                    className={cn(
+                        "absolute bottom-6 left-1/2 -translate-x-1/2",
+                        "w-auto min-w-[320px] max-w-[92%] md:w-[80%] md:max-w-4xl",
+                        "glass-panel backdrop-blur-xl backdrop-saturate-[180%] rounded-xl px-4 py-3 z-40 flex flex-col gap-3 shadow-2xl"
+                    )}
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={
+                        controlsVisible
+                            ? { y: 0, opacity: 1 }
+                            : { y: 10, opacity: 0 }
+                    }
+                    transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
+                >
+                    <Scrubber progress={progress} onSeek={seek} />
+                    <ControlsBar
+                        isPlaying={isPlaying}
+                        timecode={timecode}
+                        onTogglePlay={togglePlay}
+                        onStepFrame={stepFrame}
+                        onCapture={handleCapture}
+                        onBatchCapture={handleBatchCapture}
+                        isBatchLoading={isBatchLoading}
+                    />
+                </motion.div>
+            </div>
+
+            {/* Gallery Panel */}
+            <motion.div
+                className="relative shrink-0 z-40"
+                animate={{ height: isGalleryExpanded ? "14rem" : "7rem" }}
+                transition={{
+                    type: "spring",
+                    stiffness: 170,
+                    damping: 30,
+                    mass: 1.0,
+                }}
+            >
+                <GalleryPanel
+                    frames={frames}
+                    isExpanded={isGalleryExpanded}
+                    onToggleExpand={toggleGalleryExpand}
+                    onDeleteFrames={handleDeleteFrames}
+                    videoName={videoFile?.name ?? "web-video"}
+                />
+            </motion.div>
+            </div>
+        </TooltipProvider>
+    );
+}
