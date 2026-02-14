@@ -35,6 +35,13 @@ export default function HomePage() {
     fileInputRef.current?.click();
   }, []);
 
+  // Cleanup: remove editor-mode class when this component unmounts (e.g. route change)
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove("editor-mode");
+    };
+  }, []);
+
   // Register drag-and-drop callback
   useEffect(() => {
     handleDrop(handleFile);

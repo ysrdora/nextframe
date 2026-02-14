@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, Film, Layers, Shield, Zap } from "lucide-react";
@@ -37,6 +38,11 @@ const fadeUp = {
 };
 
 export default function AboutPage() {
+    // Defensive: ensure editor-mode scroll lock is cleared when visiting this page
+    useEffect(() => {
+        document.body.classList.remove("editor-mode");
+    }, []);
+
     return (
         <div className="min-h-[100dvh] w-full flex flex-col p-3 md:p-6 overflow-x-hidden selection:bg-white selection:text-black">
             {/* Nav */}
