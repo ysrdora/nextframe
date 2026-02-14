@@ -17,9 +17,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Reframe | Intelligent Frame Extraction",
+  title: "Next Frame | Intelligent Frame Extraction",
   description:
-    "A web-based filmmaking tool for intelligent frame extraction. Every story starts and ends with a frame.",
+    "A web-based filmmaking tool for intelligent frame extraction. Visual storytelling begins and ends with a frame.",
 };
 
 export default function RootLayout({

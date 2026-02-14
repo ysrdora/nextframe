@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatTime } from "@/lib/utils";
 
@@ -20,8 +18,9 @@ interface UseVideoPlayerReturn extends VideoPlayerState {
     stepFrame: (direction: -1 | 1) => void;
 }
 
-export function useVideoPlayer(): UseVideoPlayerReturn {
-    const videoRef = useRef<HTMLVideoElement | null>(null);
+export function useVideoPlayer(externalRef?: React.RefObject<HTMLVideoElement | null>): UseVideoPlayerReturn {
+    const internalRef = useRef<HTMLVideoElement | null>(null);
+    const videoRef = externalRef || internalRef;
     const [state, setState] = useState<VideoPlayerState>({
         isPlaying: false,
         currentTime: 0,

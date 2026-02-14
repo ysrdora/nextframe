@@ -5,6 +5,7 @@ import {
     MoreVertical,
     Plus,
 } from "lucide-react";
+import Link from "next/link";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -28,7 +29,7 @@ export function Navbar({ isEditorMode, onImport, onReset }: NavbarProps) {
                 onClick={onReset}
             >
                 <span className="font-semibold tracking-tight text-lg text-zinc-200 group-hover:text-white transition">
-                    reframe
+                    next frame
                 </span>
                 <AnimatePresence>
                     {isEditorMode && (
@@ -74,8 +75,10 @@ export function Navbar({ isEditorMode, onImport, onReset }: NavbarProps) {
                         align="end"
                         className="w-56 bg-[#1a1a1a] border-zinc-800"
                     >
-                        <DropdownMenuItem className="text-[13px] text-zinc-400 hover:text-zinc-200 cursor-pointer">
-                            About
+                        <DropdownMenuItem className="text-[13px] text-zinc-400 hover:text-zinc-200 cursor-pointer p-0">
+                            <Link href="/about" className="w-full px-2 py-1.5">
+                                About
+                            </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-[13px] text-zinc-400 hover:text-zinc-200 cursor-pointer">
                             Feedback

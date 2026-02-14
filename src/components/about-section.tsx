@@ -11,18 +11,16 @@ export function AboutSection() {
             transition={{ delay: 0.8, duration: 0.6 }}
         >
             <h2 className="text-3xl md:text-5xl lg:text-6xl font-medium tracking-tight text-white leading-[1.15]">
-                Reframe is a web-based tool
+                Next Frame is a web-based tool
                 <br className="hidden md:block" /> built by and for creatives.
             </h2>
             <p className="text-base md:text-xl text-zinc-400 max-w-2xl leading-relaxed font-light">
-                Helping professional AI filmmakers to seamlessly extend their videos by
-                extracting any frame and building from there, transforming their creative
-                process.
+                Transforming the filmmaking process by enabling professional AI filmmakers to effortlessly extend their stories—extract any frame, build upon it.
             </p>
 
             <div className="flex flex-col md:flex-row items-center justify-between w-full pt-16 md:pt-24 border-t border-zinc-900 text-zinc-600 text-[10px] md:text-xs tracking-wider uppercase font-mono mt-8 md:mt-12 gap-4">
                 <span>Serverless, client-based web app. 100% Secure.</span>
-                <span>Copyright AD Terms of Service apply.</span>
+                <span>Copyright Film-maker Network - Terms of Service apply.</span>
             </div>
         </motion.section>
     );

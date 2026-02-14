@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useRef, useState } from "react";
 import { formatTime } from "@/lib/utils";
 
@@ -57,27 +55,8 @@ export function useFrameCapture(
         if (!video) return null;
         triggerFlash();
         const timecode = formatTime(video.currentTime).replace(/:/g, "");
-        return extractFrame(`NF_${timecode}.png`);
+        return extractFrame(`REFRAME_${timecode}.png`);
     }, [videoRef, triggerFlash, extractFrame]);
-
-    const seekToTime = useCallback(
-        (time: number): Promise<void> => {
-            return new Promise((resolve) => {
-                const video = videoRef.current;
-                if (!video) {
-                    resolve();
-                    return;
-                }
-                const onSeek = () => {
-                    video.removeEventListener("seeked", onSeek);
-                    resolve();
-                };
-                video.addEventListener("seeked", onSeek);
-                video.currentTime = time;
-            });
-        },
-        [videoRef]
-    );
 
     const extractFrameFromVideo = useCallback(
         (source: HTMLVideoElement, filename: string): CapturedFrame | null => {
@@ -131,13 +110,13 @@ export function useFrameCapture(
         try {
             // Capture first frame
             await seekOffscreen(0);
-            const startFrame = extractFrameFromVideo(offscreen, "NF_START.png");
+            const startFrame = extractFrameFromVideo(offscreen, "REFRAME_START.png");
             if (startFrame) frames.push(startFrame);
 
             // Capture last frame (duration - tiny epsilon to avoid overshoot)
             const endTime = Math.max(0, offscreen.duration - 0.01);
             await seekOffscreen(endTime);
-            const endFrame = extractFrameFromVideo(offscreen, "NF_END.png");
+            const endFrame = extractFrameFromVideo(offscreen, "REFRAME_END.png");
             if (endFrame) frames.push(endFrame);
         } catch (error) {
             console.error("Batch extraction error:", error);

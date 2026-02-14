@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVideoPlayer } from "@/hooks/use-video-player";
@@ -9,23 +7,27 @@ import { ControlsBar } from "./controls-bar";
 import { GalleryPanel, type GalleryFrame } from "./gallery-panel";
 import { MobileTimecode } from "./mobile-timecode";
 import { cn } from "@/lib/utils";
+import { TooltipProvider } from "../ui/tooltip";
 
 interface VideoEditorProps {
-    videoFile: File;
+    videoFile?: File; // Local upload mode
+    videoRef?: React.RefObject<HTMLVideoElement | null>; // Web video mode
 }
 
-export function VideoEditor({ videoFile }: VideoEditorProps) {
+export function VideoEditor({ videoFile, videoRef: externalVideoRef }: VideoEditorProps) {
+    const internalVideoRef = useRef<HTMLVideoElement>(null);
+    const activeVideoRef = externalVideoRef || internalVideoRef;
+
     const {
-        videoRef,
         isPlaying,
         progress,
         timecode,
         togglePlay,
         seek,
         stepFrame,
-    } = useVideoPlayer();
+    } = useVideoPlayer(activeVideoRef);
 
-    const { captureFrame, batchCapture, showFlash } = useFrameCapture(videoRef);
+    const { captureFrame, batchCapture, showFlash } = useFrameCapture(activeVideoRef);
 
     const [frames, setFrames] = useState<GalleryFrame[]>([]);
     const [isBatchLoading, setIsBatchLoading] = useState(false);
@@ -33,12 +35,12 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
     const [controlsVisible, setControlsVisible] = useState(false);
     const videoUrlRef = useRef<string>("");
 
-    // Load video when file changes
+    // Load video when file changes (local upload mode)
     useEffect(() => {
-        if (videoFile) {
+        if (videoFile && !externalVideoRef) {
             const url = URL.createObjectURL(videoFile);
             videoUrlRef.current = url;
-            const video = videoRef.current;
+            const video = activeVideoRef.current;
             if (video) {
                 video.src = url;
                 video.currentTime = 0;
@@ -53,7 +55,14 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
                 URL.revokeObjectURL(url);
             };
         }
-    }, [videoFile, videoRef]);
+    }, [videoFile, externalVideoRef, activeVideoRef]);
+
+    // For web video mode, show controls immediately
+    useEffect(() => {
+        if (externalVideoRef) {
+            setControlsVisible(true);
+        }
+    }, [externalVideoRef]);
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -127,17 +136,28 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
     }, [batchCapture, addFrameToGallery]);
 
     return (
-        <div className="flex flex-col flex-1 min-h-0">
-            {/* Video Stage */}
-            <div className="relative rounded-xl overflow-hidden bg-black border border-zinc-800/50 shadow-2xl flex-1 min-h-0">
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <video
-                        ref={videoRef}
-                        className="w-full h-full object-contain cursor-pointer"
-                        onClick={togglePlay}
-                        playsInline
-                    />
-                </div>
+        <TooltipProvider>
+            <div className="flex flex-col flex-1 min-h-0">
+                {/* Video Stage */}
+                <div className="relative rounded-xl overflow-hidden bg-black border border-zinc-800/50 shadow-2xl flex-1 min-h-0">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        {!externalVideoRef && (
+                            <video
+                                ref={internalVideoRef}
+                                className="w-full h-full object-contain cursor-pointer"
+                                onClick={togglePlay}
+                                playsInline
+                            />
+                        )}
+                        {externalVideoRef && externalVideoRef.current && (
+                            <video
+                                className="w-full h-full object-contain cursor-pointer"
+                                onClick={togglePlay}
+                                playsInline
+                                src={externalVideoRef.current.src}
+                            />
+                        )}
+                    </div>
 
                 {/* Flash overlay */}
                 <AnimatePresence>
@@ -199,9 +219,10 @@ export function VideoEditor({ videoFile }: VideoEditorProps) {
                     isExpanded={isGalleryExpanded}
                     onToggleExpand={toggleGalleryExpand}
                     onDeleteFrames={handleDeleteFrames}
-                    videoName={videoFile.name}
+                    videoName={videoFile?.name ?? "web-video"}
                 />
             </motion.div>
-        </div>
+            </div>
+        </TooltipProvider>
     );
 }

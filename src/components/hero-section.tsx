@@ -27,7 +27,7 @@ export function HeroSection() {
                     Extraction.
                 </h1>
                 <p className="text-zinc-500 text-sm font-normal tracking-wide">
-                    Every Story Starts and Ends with a Frame.
+                    Visual storytelling begins and ends with a frame.
                 </p>
             </motion.div>
         </div>
